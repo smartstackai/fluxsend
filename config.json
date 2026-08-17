@@ -1,0 +1,18 @@
+{
+  "port": 3000,
+  "chunkSize": 16777216,
+  "maxFileSize": 0,
+  "stunServers": [
+    "stun:stun.l.google.com:19302",
+    "stun:stun1.l.google.com:19302"
+  ],
+  "turnServers": [
+    {
+      "urls": "turn:YOUR_SERVER_IP:3478",
+      "username": "p2pshare",
+      "credential": "changeme123"
+    }
+  ],
+  "roomTTL": 600000,
+  "downloadDir": "./downloads"
+}

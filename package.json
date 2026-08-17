@@ -1,0 +1,16 @@
+{
+  "name": "p2p-share",
+  "version": "1.0.0",
+  "description": "Private peer-to-peer file sharing - no storage, just a secure tunnel between devices",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --dev"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "qrcode": "^1.5.4",
+    "mime-types": "^2.1.35"
+  }
+}
