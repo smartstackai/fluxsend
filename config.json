@@ -8,9 +8,19 @@
   ],
   "turnServers": [
     {
-      "urls": "turn:YOUR_SERVER_IP:3478",
-      "username": "p2pshare",
-      "credential": "changeme123"
+      "urls": "turn:openrelay.metered.ca:80",
+      "username": "OpenRelayProject",
+      "credential": "81769e2bec85c2f3a31a0378"
+    },
+    {
+      "urls": "turn:openrelay.metered.ca:443",
+      "username": "OpenRelayProject",
+      "credential": "81769e2bec85c2f3a31a0378"
+    },
+    {
+      "urls": "turn:openrelay.metered.ca:443?transport=tcp",
+      "username": "OpenRelayProject",
+      "credential": "81769e2bec85c2f3a31a0378"
     }
   ],
   "roomTTL": 600000,
