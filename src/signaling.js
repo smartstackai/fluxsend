@@ -4,21 +4,10 @@ const RoomManager = require('./rooms');
 
 class SignalingServer {
   constructor(server, config) {
-    this.wss = new WebSocketServer({ noServer: true });
+    this.wss = new WebSocketServer({ server, path: '/ws' });
     this.roomManager = new RoomManager(config.roomTTL);
     this.clients = new Map();
     this.config = config;
-
-    server.on('upgrade', (request, socket, head) => {
-      const url = new URL(request.url, 'http://localhost');
-      if (url.pathname === '/ws') {
-        this.wss.handleUpgrade(request, socket, head, (ws) => {
-          this.wss.emit('connection', ws, request);
-        });
-      } else {
-        socket.destroy();
-      }
-    });
 
     this.wss.on('connection', (ws, req) => {
       const clientId = this.generateId();
