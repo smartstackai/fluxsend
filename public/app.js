@@ -78,11 +78,11 @@ function connectSignaling(){
   return new Promise((resolve,reject)=>{
     const ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/ws');
     state.ws=ws;
-    const t=setTimeout(()=>{reject(new Error('Timeout'));ws.close();},5000);
+    const t=setTimeout(()=>{reject(new Error('Server is waking up, please try again'));ws.close();},30000);
     ws.onopen=()=>{clearTimeout(t);resolve(ws);};
-    ws.onerror=()=>{clearTimeout(t);reject(new Error('Connection failed'));};
+    ws.onerror=()=>{clearTimeout(t);reject(new Error('Cannot reach server'));};
+    ws.onclose=()=>{clearTimeout(t);};
     ws.onmessage=e=>{try{handleSignalingMessage(JSON.parse(e.data));}catch(err){}};
-    ws.onclose=()=>{};
   });
 }
 
@@ -191,7 +191,12 @@ async function joinRoom(){
   const code=document.getElementById('room-code-input').value.trim().toUpperCase();
   if(code.length!==6){showJoinError('Enter a valid 6-digit code');return;}
   const pw=document.getElementById('join-password').classList.contains('hidden')?'':document.getElementById('join-password').value.trim();
-  try{await connectSignaling();state.ws.send(JSON.stringify({type:'join-room',code,password:pw||undefined}));}catch(e){showJoinError('Failed: '+e.message);}
+  const btn=document.getElementById('join-btn');
+  const originalText=btn.textContent;
+  btn.disabled=true;btn.textContent='Connecting...';
+  showJoinError('Waking up server...');
+  try{await connectSignaling();state.ws.send(JSON.stringify({type:'join-room',code,password:pw||undefined}));}catch(e){showJoinError(e.message);}
+  btn.disabled=false;btn.textContent=originalText;
 }
 function showJoinError(msg){const el=document.getElementById('join-error');el.textContent=msg;el.classList.remove('hidden');}
 function onRoomJoined(code){
