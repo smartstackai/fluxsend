@@ -48,6 +48,11 @@ class SignalingServer {
       case 'answer': return this.handleRelay(clientId, msg);
       case 'ice-candidate': return this.handleRelay(clientId, msg);
       case 'file-manifest': return this.handleRelay(clientId, msg);
+      case 'file-start': return this.handleRelay(clientId, msg);
+      case 'file-chunk': return this.handleRelay(clientId, msg);
+      case 'file-end': return this.handleRelay(clientId, msg);
+      case 'ws-chunk-ack': return this.handleRelay(clientId, msg);
+      case 'ws-fallback': return this.handleRelay(clientId, msg);
       case 'transfer-progress': return this.handleRelay(clientId, msg);
       case 'transfer-complete': return this.handleTransferComplete(clientId, msg);
       case 'transfer-error': return this.handleRelay(clientId, msg);

@@ -1,15 +1,15 @@
-  const state = {
+const state = {
   role: null, ws: null, peerConnection: null, dataChannel: null, roomCode: null,
   files: [], manifest: null, senderState: { chunksAcked:0, totalChunks:0, startTime:null, currentFile:0 },
   transferState: { bytesReceived:0, totalBytes:0, startTime:null, fileBuffers:[], filesCompleted:0 },
-  chatOpen: false, chatUnread: 0, iceServers: [],
+  chatOpen: false, chatUnread: 0, iceServers: [], useWSFallback: false, iceTimeout: null,
 };
 
 // ==================== VIEWS ====================
-function showView(id) { document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById(id).classList.add('active'); }
-function showSenderView() { state.role='sender'; showView('view-sender'); }
-function showReceiverView() { state.role='receiver'; showView('view-receiver'); }
-function switchSendMode(mode) {
+function showView(id){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.getElementById(id).classList.add('active');}
+function showSenderView(){state.role='sender';showView('view-sender');}
+function showReceiverView(){state.role='receiver';showView('view-receiver');}
+function switchSendMode(mode){
   document.querySelectorAll('#sender-step-2 .tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('#sender-step-2 .tab-panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#sender-step-2 .tab')[mode==='qr'?0:1].classList.add('active');
@@ -30,8 +30,7 @@ function addHistory(entry){const h=getHistory();h.unshift(entry);if(h.length>50)
 function clearHistory(){localStorage.removeItem('p2p_history');renderHistory();}
 function showHistory(){showView('view-history');renderHistory();}
 function renderHistory(){
-  const h=getHistory();
-  const el=document.getElementById('history-list');
+  const h=getHistory();const el=document.getElementById('history-list');
   if(!h.length){el.innerHTML='<div class="history-empty">No transfers yet</div>';return;}
   el.innerHTML=h.map(e=>`<div class="history-item"><div class="h-icon ${e.type}">${e.type==='sent'?'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>':'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="8 6 12 2 16 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>'}</div><div class="h-info"><div class="h-name">${e.files.map(f=>f.name).join(', ')}</div><div class="h-meta">${e.files.length} file${e.files.length>1?'s':''} &middot; ${new Date(e.time).toLocaleString()}</div></div><div class="h-size">${formatSize(e.totalSize)}</div></div>`).join('');
 }
@@ -49,25 +48,16 @@ dropZone.addEventListener('drop',e=>{
   addFiles(e.dataTransfer.files);
 });
 fileInput.addEventListener('change',()=>{addFiles(fileInput.files);fileInput.value='';});
-
 function processEntries(entries){Promise.all(entries.map(e=>readEntry(e))).then(r=>{const all=r.flat();if(all.length)addFiles(all);});}
 function readEntry(entry){return new Promise(resolve=>{if(entry.isFile){entry.file(f=>resolve([f]),()=>resolve([]));}else if(entry.isDirectory){const reader=entry.createReader();const all=[];function read(){reader.readEntries(b=>{if(!b.length){Promise.all(all.map(e=>readEntry(e))).then(r=>resolve(r.flat()));}else{all.push(...b);read();}},()=>resolve([]));}read();}else resolve([]);});}
-
-function addFiles(list){
-  let added=0;
-  for(const f of list){if(!state.files.find(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified)){state.files.push(f);added++;}}
-  renderFileList();
-  if(added)showToast(added+' file'+(added>1?'s':'')+' added','success');
-}
+function addFiles(list){let added=0;for(const f of list){if(!state.files.find(x=>x.name===f.name&&x.size===f.size&&x.lastModified===f.lastModified)){state.files.push(f);added++;}}renderFileList();if(added)showToast(added+' file'+(added>1?'s':'')+' added','success');}
 function removeFile(i){state.files.splice(i,1);renderFileList();}
 function clearFiles(){state.files=[];renderFileList();}
 function renderFileList(){
-  const c=document.getElementById('file-list');
-  const btn=document.getElementById('send-btn');
+  const c=document.getElementById('file-list');const btn=document.getElementById('send-btn');
   if(!state.files.length){c.innerHTML='';btn.disabled=true;return;}
-  btn.disabled=false;
-  const total=state.files.reduce((a,f)=>a+f.size,0);
-  c.innerHTML=state.files.map((f,i)=>`<div class="file-item"><div class="file-icon ${f.type.startsWith('image/')?'icon-img':f.type.startsWith('video/')?'icon-vid':f.type.startsWith('audio/')?'icon-aud':''}">${getFileIcon(f.name)}</div><div class="file-info"><div class="file-name">${f.name}</div><div class="file-size">${formatSize(f.size)}</div></div><button class="file-remove" onclick="removeFile(${i})">&times;</button></div>`).join('')+`<div class="file-item" style="justify-content:space-between;color:var(--text-dim);font-size:12px"><span>${state.files.length} file${state.files.length>1?'s':''} &middot; ${formatSize(total)}</span><button class="file-remove" onclick="clearFiles()" style="font-size:11px;color:var(--error)">Clear all</button></div>`;
+  btn.disabled=false;const total=state.files.reduce((a,f)=>a+f.size,0);
+  c.innerHTML=state.files.map((f,i)=>`<div class="file-item"><div class="file-icon">${getFileIcon(f.name)}</div><div class="file-info"><div class="file-name">${f.name}</div><div class="file-size">${formatSize(f.size)}</div></div><button class="file-remove" onclick="removeFile(${i})">&times;</button></div>`).join('')+`<div class="file-item" style="justify-content:space-between;color:var(--text-dim);font-size:12px"><span>${state.files.length} file${state.files.length>1?'s':''} &middot; ${formatSize(total)}</span><button class="file-remove" onclick="clearFiles()" style="font-size:11px;color:var(--error)">Clear all</button></div>`;
 }
 
 // ==================== PASSWORD ====================
@@ -104,6 +94,11 @@ function handleSignalingMessage(msg){
     case'transfer-complete':onTransferComplete(msg);break;
     case'peer-disconnected':onPeerDisconnected();break;
     case'error':handleError(msg.code);break;
+    case'ws-fallback':onWSFallback(msg);break;
+    case'file-manifest':if(state.useWSFallback)onReceiverManifest(msg);break;
+    case'file-start':if(state.useWSFallback){currentReceiveFile=msg.fileIndex;currentFileBytesReceived=0;updateReceiverFileStatus(msg.fileIndex,'Receiving...',0);}break;
+    case'file-chunk':if(state.useWSFallback)handleWSChunk(msg);break;
+    case'file-end':if(state.useWSFallback){const idx=msg.fileIndex;currentReceiveFile=null;currentFileBytesReceived=0;updateReceiverFileStatus(idx,'Done',100);assembleAndDownloadFile(idx);}break;
   }
 }
 
@@ -128,22 +123,45 @@ async function onRoomCreated(msg){
 async function onPeerJoined(){
   document.getElementById('sender-step-2').classList.add('hidden');
   document.getElementById('sender-step-3').classList.remove('hidden');
-  try{await setupSenderPeerConnection();}catch(e){showToast('WebRTC failed: '+e.message,'error');}
+  try{
+    await setupSenderPeerConnection();
+    state.iceTimeout=setTimeout(()=>{
+      if(!state.dataChannel||state.dataChannel.readyState!=='open'){
+        activateWSFallback();
+      }
+    },12000);
+  }catch(e){activateWSFallback();}
+}
+
+function activateWSFallback(){
+  if(state.useWSFallback)return;
+  state.useWSFallback=true;
+  if(state.iceTimeout){clearTimeout(state.iceTimeout);state.iceTimeout=null;}
+  if(state.peerConnection){state.peerConnection.close();state.peerConnection=null;}
+  state.ws.send(JSON.stringify({type:'ws-fallback'}));
+  updateSenderStatus('Using relay mode...','success');
+  startFileTransferWS();
 }
 
 async function setupSenderPeerConnection(){
   const pc=new RTCPeerConnection({iceServers:state.iceServers});
   state.peerConnection=pc;
-  pc.onicecandidate=e=>{if(e.candidate)state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));};
+  let iceCount=0;
+  pc.onicecandidate=e=>{
+    if(e.candidate){iceCount++;state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));}
+  };
   pc.oniceconnectionstatechange=()=>{
     const s=pc.iceConnectionState;
-    if(s==='failed')updateSenderStatus('Connection failed - check network','error');
-    else if(s==='connected'||s==='completed')updateSenderStatus('Connected! Transferring...','success');
-    else if(s==='checking')updateSenderStatus('Connecting to peer...');
+    if(s==='failed')activateWSFallback();
+    else if(s==='connected'||s==='completed'){
+      if(state.iceTimeout){clearTimeout(state.iceTimeout);state.iceTimeout=null;}
+      updateSenderStatus('Connected! Transferring...','success');
+    }
+    else if(s==='checking')updateSenderStatus('Connecting to peer... ('+iceCount+' candidates)');
   };
   const ch=pc.createDataChannel('file-transfer',{ordered:true});
   state.dataChannel=ch;
-  ch.onopen=()=>{updateSenderStatus('Connected! Transferring...','success');startFileTransfer();};
+  ch.onopen=()=>{if(state.iceTimeout){clearTimeout(state.iceTimeout);state.iceTimeout=null;}updateSenderStatus('Connected! Transferring...','success');startFileTransfer();};
   ch.onmessage=e=>{try{const m=JSON.parse(e.data);if(m.type==='chunk-ack'){state.senderState.chunksAcked++;updateSenderProgress();}}catch(err){}};
   const offer=await pc.createOffer();await pc.setLocalDescription(offer);
   state.ws.send(JSON.stringify({type:'offer',offer:pc.localDescription}));
@@ -151,7 +169,7 @@ async function setupSenderPeerConnection(){
 
 function updateSenderStatus(text,type=''){const bar=document.getElementById('transfer-status-sender');bar.innerHTML='<span>'+text+'</span>';bar.className='status-bar '+type;}
 
-// ==================== FILE TRANSFER ====================
+// ==================== FILE TRANSFER (WebRTC) ====================
 const CHUNK_SIZE=16*1024*1024;
 async function startFileTransfer(){
   const manifest=state.files.map(f=>({name:f.name,size:f.size,type:f.type||'application/octet-stream'}));
@@ -159,10 +177,10 @@ async function startFileTransfer(){
   state.senderState.totalChunks=state.files.reduce((a,f)=>a+Math.ceil(f.size/CHUNK_SIZE),0);
   state.dataChannel.send(JSON.stringify({type:'file-manifest',manifest}));
   renderSenderTransferFiles();await new Promise(r=>setTimeout(r,500));
-  for(let i=0;i<state.files.length;i++){state.senderState.currentFile=i;updateFileStatus(i,'Sending...',false);await sendFile(i);updateFileStatus(i,'Done',true);}
+  for(let i=0;i<state.files.length;i++){state.senderState.currentFile=i;updateFileStatus(i,'Sending...',false);await sendFileWebRTC(i);updateFileStatus(i,'Done',true);}
   addHistory({type:'sent',files:state.files.map(f=>({name:f.name,size:f.size})),totalSize:state.files.reduce((a,f)=>a+f.size,0),time:Date.now()});
 }
-async function sendFile(fi){
+async function sendFileWebRTC(fi){
   const file=state.files[fi];const tc=Math.ceil(file.size/CHUNK_SIZE);
   state.dataChannel.send(JSON.stringify({type:'file-start',fileIndex:fi,fileName:file.name,fileSize:file.size,totalChunks:tc}));
   let offset=0,ci=0;
@@ -176,18 +194,54 @@ async function sendFile(fi){
   }
   state.dataChannel.send(JSON.stringify({type:'file-end',fileIndex:fi}));
 }
-function calcAcked(fi,ci){let a=0;for(let i=0;i<fi;i++)a+=Math.ceil(state.files[i].size/CHUNK_SIZE);return a+ci;}
+
+// ==================== FILE TRANSFER (WebSocket Fallback) ====================
+const WS_CHUNK_SIZE=64*1024;
+async function startFileTransferWS(){
+  const manifest=state.files.map(f=>({name:f.name,size:f.size,type:f.type||'application/octet-stream'}));
+  state.manifest=manifest;state.senderState.startTime=Date.now();state.senderState.chunksAcked=0;
+  state.senderState.totalChunks=state.files.reduce((a,f)=>a+Math.ceil(f.size/WS_CHUNK_SIZE),0);
+  state.ws.send(JSON.stringify({type:'file-manifest',manifest}));
+  renderSenderTransferFiles();
+  for(let i=0;i<state.files.length;i++){state.senderState.currentFile=i;updateFileStatus(i,'Sending...',false);await sendFileWS(i);updateFileStatus(i,'Done',true);}
+  addHistory({type:'sent',files:state.files.map(f=>({name:f.name,size:f.size})),totalSize:state.files.reduce((a,f)=>a+f.size,0),time:Date.now()});
+}
+async function sendFileWS(fi){
+  const file=state.files[fi];const tc=Math.ceil(file.size/WS_CHUNK_SIZE);
+  state.ws.send(JSON.stringify({type:'file-start',fileIndex:fi,fileName:file.name,fileSize:file.size,totalChunks:tc}));
+  let offset=0,ci=0;
+  while(offset<file.size){
+    const end=Math.min(offset+WS_CHUNK_SIZE,file.size);
+    const buf=await file.slice(offset,end).arrayBuffer();
+    const b64=bufToBase64(buf);
+    state.ws.send(JSON.stringify({type:'file-chunk',fileIndex:fi,chunkIndex:ci,offset,size:buf.byteLength,data:b64}));
+    state.senderState.chunksAcked=calcAcked(fi,ci);updateSenderProgress();
+    await new Promise(r=>setTimeout(r,5));
+    offset=end;ci++;
+  }
+  state.ws.send(JSON.stringify({type:'file-end',fileIndex:fi}));
+}
+function bufToBase64(buf){
+  const bytes=new Uint8Array(buf);let b='';for(let i=0;i<bytes.byteLength;i++)b+=String.fromCharCode(bytes[i]);
+  return btoa(b);
+}
+function base64ToBuf(b64){
+  const bin=atob(b64);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes.buffer;
+}
+
+// ==================== SHARED ====================
+function calcAcked(fi,ci){let a=0;for(let i=0;i<fi;i++)a+=Math.ceil(state.files[i].size/(state.useWSFallback?WS_CHUNK_SIZE:CHUNK_SIZE));return a+ci;}
 function updateSenderProgress(){
   const{chunksAcked,totalChunks,startTime}=state.senderState;if(!totalChunks)return;
   const pct=Math.round(chunksAcked/totalChunks*100);const elapsed=(Date.now()-startTime)/1000;
-  const speed=elapsed>0?chunksAcked*CHUNK_SIZE/elapsed:0;const eta=speed>0?(totalChunks-chunksAcked)*CHUNK_SIZE/speed:0;
+  const speed=elapsed>0?chunksAcked*(state.useWSFallback?WS_CHUNK_SIZE:CHUNK_SIZE)/elapsed:0;const eta=speed>0?(totalChunks-chunksAcked)*(state.useWSFallback?WS_CHUNK_SIZE:CHUNK_SIZE)/speed:0;
   document.getElementById('progress-bar-sender').style.width=pct+'%';
   document.getElementById('progress-percent-sender').textContent=pct+'%';
   document.getElementById('progress-speed-sender').textContent=formatSpeed(speed);
   document.getElementById('progress-eta-sender').textContent=formatETA(eta);
   const cf=state.senderState.currentFile;if(cf<state.files.length){
     const fileEl=document.getElementById('sender-file-'+cf);
-    if(fileEl){const fc=Math.ceil(state.files[cf].size/CHUNK_SIZE);const fa=chunksAcked-calcAcked(cf,0);const fp=Math.min(100,Math.round(fa/fc*100));const bar=fileEl.querySelector('.file-progress');if(bar)bar.style.width=fp+'%';}
+    if(fileEl){const fc=Math.ceil(state.files[cf].size/(state.useWSFallback?WS_CHUNK_SIZE:CHUNK_SIZE));const fa=chunksAcked-calcAcked(cf,0);const fp=Math.min(100,Math.round(fa/fc*100));const bar=fileEl.querySelector('.file-progress');if(bar)bar.style.width=fp+'%';}
   }
 }
 function renderSenderTransferFiles(){
@@ -200,10 +254,8 @@ async function joinRoom(){
   const code=document.getElementById('room-code-input').value.trim().toUpperCase();
   if(code.length!==6){showJoinError('Enter a valid 6-digit code');return;}
   const pw=document.getElementById('join-password').classList.contains('hidden')?'':document.getElementById('join-password').value.trim();
-  const btn=document.getElementById('join-btn');
-  const originalText=btn.textContent;
-  btn.disabled=true;btn.textContent='Connecting...';
-  showJoinError('Waking up server...');
+  const btn=document.getElementById('join-btn');const originalText=btn.textContent;
+  btn.disabled=true;btn.textContent='Connecting...';showJoinError('Waking up server...');
   try{await connectSignaling();state.ws.send(JSON.stringify({type:'join-room',code,password:pw||undefined}));}catch(e){showJoinError(e.message);}
   btn.disabled=false;btn.textContent=originalText;
 }
@@ -215,12 +267,31 @@ function onRoomJoined(code){
   showToast('Connected to room '+code,'success');
 }
 
-async function onOffer(msg){try{await setupReceiverPeerConnection(msg);}catch(e){showToast('WebRTC error: '+e.message,'error');}}
+function onWSFallback(){
+  state.useWSFallback=true;
+  if(state.peerConnection){state.peerConnection.close();state.peerConnection=null;}
+  updateReceiverStatus('Using relay mode...','success');
+}
+
+async function onOffer(msg){try{await setupReceiverPeerConnection(msg);}catch(e){activateWSFallbackReceiver();}}
+function activateWSFallbackReceiver(){
+  state.useWSFallback=true;
+  if(state.peerConnection){state.peerConnection.close();state.peerConnection=null;}
+  updateReceiverStatus('Using relay mode...','success');
+}
 async function setupReceiverPeerConnection(offerMsg){
   const pc=new RTCPeerConnection({iceServers:state.iceServers});
   state.peerConnection=pc;
-  pc.onicecandidate=e=>{if(e.candidate)state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));};
-  pc.oniceconnectionstatechange=()=>{if(pc.iceConnectionState==='failed')updateReceiverStatus('Connection failed','error');};
+  let iceCount=0;
+  pc.onicecandidate=e=>{
+    if(e.candidate){iceCount++;state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));}
+  };
+  pc.oniceconnectionstatechange=()=>{
+    const s=pc.iceConnectionState;
+    if(s==='failed')activateWSFallbackReceiver();
+    else if(s==='connected'||s==='completed')updateReceiverStatus('Connected! Receiving files...','success');
+    else if(s==='checking')updateReceiverStatus('Connecting... ('+iceCount+' candidates)');
+  };
   pc.ondatachannel=e=>{const ch=e.channel;state.dataChannel=ch;ch.onmessage=ev=>handleReceiverDataMessage(ev);};
   await pc.setRemoteDescription(new RTCSessionDescription(offerMsg.offer));
   const answer=await pc.createAnswer();await pc.setLocalDescription(answer);
@@ -258,7 +329,7 @@ function onReceiverManifest(msg){
 function renderReceiverTransferFiles(){
   document.getElementById('transfer-files-receiver').innerHTML=state.manifest.map((f,i)=>`<div class="transfer-file-item" id="receiver-file-${i}"><div class="file-icon-small">${getFileIcon(f.name)}</div><span class="name">${f.name}</span><span class="size">${formatSize(f.size)}</span><div class="file-progress-wrap"><div class="file-progress"></div></div><span class="status" id="receiver-file-status-${i}">Waiting...</span></div>`).join('');
 }
-function updateReceiverFileStatus(i,text,pct){const el=document.getElementById('receiver-file-status-'+i);if(el){el.textContent=text;el.className='status'+(pct===100?' done':'');}const bar=document.getElementById('receiver-file-bar-'+i);if(bar&&pct!==undefined)bar.style.width=pct+'%';}
+function updateReceiverFileStatus(i,text,pct){const el=document.getElementById('receiver-file-status-'+i);if(el){el.textContent=text;el.className='status'+(pct===100?' done':'');}}
 function updateReceiverFileProgress(i){const fsize=state.manifest[i].size;if(!fsize)return;const pct=Math.min(100,Math.round(currentFileBytesReceived/fsize*100));const items=document.getElementById('receiver-file-'+i);if(items){const bar=items.querySelector('.file-progress');if(bar)bar.style.width=pct+'%';const el=items.querySelector('.status');if(el&&!el.classList.contains('done'))el.textContent=pct+'%';}}
 function assembleAndDownloadFile(fi){
   const info=state.manifest[fi];const chunks=state.transferState.fileBuffers[fi];if(!chunks.length)return;
@@ -271,11 +342,11 @@ function assembleAndDownloadFile(fi){
 function onAllFilesReceived(){
   document.getElementById('receiver-step-3').classList.add('hidden');
   document.getElementById('receiver-step-4').classList.remove('hidden');
-  const total=state.manifest.reduce((a,f)=>a+f.size,0);const elapsed=(Date.now()-state.transferState.startTime)/1000;
-  const speed=elapsed>0?total/elapsed:0;
+  const total=state.manifest.reduce((a,f)=>a+f.size,0);const elapsed=(Date.now()-state.transferState.startTime)/1000;const speed=elapsed>0?total/elapsed:0;
   document.getElementById('receiver-complete-info').innerHTML=state.manifest.length+' file'+(state.manifest.length>1?'s':'')+' received ('+formatSize(total)+') in '+formatETA(elapsed)+' at '+formatSpeed(speed);
   document.getElementById('received-files-list').innerHTML=state.manifest.map(f=>`<div class="file-item"><div class="file-icon-small">${getFileIcon(f.name)}</div><div class="file-info"><div class="file-name">${f.name}</div><div class="file-size">${formatSize(f.size)}</div></div><span class="status done">Downloaded</span></div>`).join('');
-  if(state.dataChannel)state.dataChannel.send(JSON.stringify({type:'transfer-complete'}));
+  if(state.useWSFallback){state.ws.send(JSON.stringify({type:'transfer-complete'}));}
+  else if(state.dataChannel){state.dataChannel.send(JSON.stringify({type:'transfer-complete'}));}
   addHistory({type:'received',files:state.manifest.map(f=>({name:f.name,size:f.size})),totalSize:total,time:Date.now()});
 }
 function updateReceiverProgress(){
@@ -289,6 +360,16 @@ function updateReceiverProgress(){
 }
 function updateReceiverStatus(text,type=''){const bar=document.getElementById('transfer-status-receiver');bar.innerHTML='<span>'+text+'</span>';bar.className='status-bar '+type;}
 
+// ==================== WS FALLBACK RECEIVER HANDLER ====================
+function handleWSChunk(msg){
+  if(currentReceiveFile===null||currentReceiveFile!==msg.fileIndex){currentReceiveFile=msg.fileIndex;currentFileBytesReceived=0;}
+  const buf=base64ToBuf(msg.data);
+  state.transferState.fileBuffers[msg.fileIndex].push(buf);
+  state.transferState.bytesReceived+=buf.byteLength;
+  currentFileBytesReceived+=buf.byteLength;
+  updateReceiverProgress();updateReceiverFileProgress(msg.fileIndex);
+}
+
 // ==================== CHAT ====================
 function toggleChat(){
   state.chatOpen=!state.chatOpen;
@@ -297,8 +378,7 @@ function toggleChat(){
 }
 function sendChatMessage(){
   const input=document.getElementById('chat-input');const text=input.value.trim();if(!text)return;
-  input.value='';
-  addChatBubble(text,true);
+  input.value='';addChatBubble(text,true);
   if(state.ws&&state.ws.readyState===1)state.ws.send(JSON.stringify({type:'chat',text}));
 }
 function onChatMessage(msg){
@@ -306,8 +386,7 @@ function onChatMessage(msg){
   if(!state.chatOpen){state.chatUnread++;const b=document.getElementById('chat-badge');b.textContent=state.chatUnread;b.classList.remove('hidden');}
 }
 function addChatBubble(text,sent){
-  const container=document.getElementById('chat-messages');
-  const div=document.createElement('div');
+  const container=document.getElementById('chat-messages');const div=document.createElement('div');
   div.className='chat-msg '+(sent?'sent':'received');
   const now=new Date();const time=now.getHours().toString().padStart(2,'0')+':'+now.getMinutes().toString().padStart(2,'0');
   div.innerHTML=text+'<div class="time">'+time+'</div>';
@@ -327,31 +406,28 @@ function onTransferComplete(){
     document.getElementById('sender-step-3').classList.add('hidden');
     document.getElementById('sender-step-4').classList.remove('hidden');
     const total=state.files.reduce((a,f)=>a+f.size,0);const elapsed=(Date.now()-state.senderState.startTime)/1000;const speed=elapsed>0?total/elapsed:0;
-    document.getElementById('sender-complete-info').innerHTML=state.files.length+' file'+(state.files.length>1?'s':'')+' sent ('+formatSize(total)+') in '+formatETA(elapsed)+' at '+formatSpeed(speed);
+    document.getElementById('sender-complete-info').innerHTML=state.files.length+' file'+(state.files.length>1?'s':'')+' sent ('+formatSize(total)+') in '+formatETA(elapsed)+' at '+formatSpeed(speed)+(state.useWSFallback?' (relay mode)':'');
   }
 }
 function onPeerDisconnected(){showToast('Peer disconnected','error');}
 
 // ==================== RESET ====================
 function resetSender(){
-  state.role=null;state.files=[];state.roomCode=null;state.manifest=null;
+  state.role=null;state.files=[];state.roomCode=null;state.manifest=null;state.useWSFallback=false;
+  if(state.iceTimeout){clearTimeout(state.iceTimeout);state.iceTimeout=null;}
   if(state.ws){state.ws.close();state.ws=null;}if(state.peerConnection){state.peerConnection.close();state.peerConnection=null;}if(state.dataChannel){state.dataChannel=null;}
   state.senderState={chunksAcked:0,totalChunks:0,startTime:null,currentFile:0};
   ['sender-step-1','sender-step-2','sender-step-3','sender-step-4'].forEach((id,i)=>{document.getElementById(id).classList.toggle('hidden',i!==0);});
-  document.getElementById('chat-toggle').classList.add('hidden');
-  document.getElementById('chat-panel').classList.add('hidden');
-  state.chatOpen=false;
+  document.getElementById('chat-toggle').classList.add('hidden');document.getElementById('chat-panel').classList.add('hidden');state.chatOpen=false;
   renderFileList();showView('view-sender');
 }
 function resetReceiver(){
-  state.role=null;state.roomCode=null;state.manifest=null;
+  state.role=null;state.roomCode=null;state.manifest=null;state.useWSFallback=false;
   state.transferState={bytesReceived:0,totalBytes:0,startTime:null,fileBuffers:[],filesCompleted:0};
   if(state.ws){state.ws.close();state.ws=null;}if(state.peerConnection){state.peerConnection.close();state.peerConnection=null;}if(state.dataChannel){state.dataChannel=null;}
   ['receiver-step-1','receiver-step-2','receiver-step-3','receiver-step-4'].forEach((id,i)=>{document.getElementById(id).classList.toggle('hidden',i!==0);});
   document.getElementById('room-code-input').value='';document.getElementById('join-error').classList.add('hidden');
-  document.getElementById('chat-toggle').classList.add('hidden');
-  document.getElementById('chat-panel').classList.add('hidden');
-  state.chatOpen=false;
+  document.getElementById('chat-toggle').classList.add('hidden');document.getElementById('chat-panel').classList.add('hidden');state.chatOpen=false;
   showView('view-receiver');
 }
 
@@ -366,13 +442,9 @@ document.getElementById('room-code-input')?.addEventListener('keydown',e=>{if(e.
 // 3D CARD TILT EFFECT
 document.addEventListener('mousemove',e=>{
   document.querySelectorAll('.card-3d').forEach(card=>{
-    const rect=card.getBoundingClientRect();
-    const x=e.clientX-rect.left;const y=e.clientY-rect.top;
+    const rect=card.getBoundingClientRect();const x=e.clientX-rect.left;const y=e.clientY-rect.top;
     if(x<0||x>rect.width||y<0||y>rect.height)return;
-    const rotateX=(y-rect.height/2)/20;const rotateY=(rect.width/2-x)/20;
-    card.style.transform='perspective(800px) rotateX('+rotateX+'deg) rotateY('+rotateY+'deg) translateY(-4px)';
+    card.style.transform='perspective(800px) rotateX('+((y-rect.height/2)/20)+'deg) rotateY('+((rect.width/2-x)/20)+'deg) translateY(-4px)';
   });
 });
-document.querySelectorAll('.card-3d').forEach(card=>{
-  card.addEventListener('mouseleave',()=>{card.style.transform='';});
-});
+document.querySelectorAll('.card-3d').forEach(card=>{card.addEventListener('mouseleave',()=>{card.style.transform='';});});
