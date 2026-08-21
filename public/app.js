@@ -88,7 +88,7 @@ function connectSignaling(){
 
 function handleSignalingMessage(msg){
   switch(msg.type){
-    case'connected':state.iceServers=(msg.turnServers||[]).map(t=>({urls:t.urls,username:t.username,credential:t.credential}));break;
+    case'connected':state.iceServers=(msg.iceServers||[]);break;
     case'room-created':state.roomCode=msg.code;onRoomCreated(msg);break;
     case'room-joined':state.roomCode=msg.code;onRoomJoined(msg.code);break;
     case'peer-joined':onPeerJoined();break;
@@ -127,8 +127,7 @@ async function onPeerJoined(){
 }
 
 async function setupSenderPeerConnection(){
-  const iceServers=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},...state.iceServers];
-  const pc=new RTCPeerConnection({iceServers});
+  const pc=new RTCPeerConnection({iceServers:state.iceServers});
   state.peerConnection=pc;
   pc.onicecandidate=e=>{if(e.candidate)state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));};
   pc.oniceconnectionstatechange=()=>{if(pc.iceConnectionState==='failed')updateSenderStatus('Connection failed','error');};
@@ -208,8 +207,7 @@ function onRoomJoined(code){
 
 async function onOffer(msg){try{await setupReceiverPeerConnection(msg);}catch(e){showToast('WebRTC error: '+e.message,'error');}}
 async function setupReceiverPeerConnection(offerMsg){
-  const iceServers=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},...state.iceServers];
-  const pc=new RTCPeerConnection({iceServers});
+  const pc=new RTCPeerConnection({iceServers:state.iceServers});
   state.peerConnection=pc;
   pc.onicecandidate=e=>{if(e.candidate)state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));};
   pc.oniceconnectionstatechange=()=>{if(pc.iceConnectionState==='failed')updateReceiverStatus('Connection failed','error');};

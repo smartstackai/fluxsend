@@ -25,7 +25,7 @@ class SignalingServer {
         this.handleDisconnect(clientId);
       });
 
-      ws.send(JSON.stringify({ type: 'connected', clientId, turnServers: config.turnServers || [] }));
+      ws.send(JSON.stringify({ type: 'connected', clientId, iceServers: config.iceServers || [] }));
     });
 
     this.wss.on('error', (err) => {
