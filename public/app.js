@@ -88,7 +88,12 @@ function connectSignaling(){
 
 function handleSignalingMessage(msg){
   switch(msg.type){
-    case'connected':state.iceServers=(msg.iceServers||[]);break;
+    case'connected':{
+      const fallback=[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:stun2.l.google.com:19302'}];
+      const fromServer=msg.iceServers||msg.turnServers||[];
+      state.iceServers=fromServer.length?fromServer:fallback;
+      break;
+    }
     case'room-created':state.roomCode=msg.code;onRoomCreated(msg);break;
     case'room-joined':state.roomCode=msg.code;onRoomJoined(msg.code);break;
     case'peer-joined':onPeerJoined();break;
@@ -130,7 +135,12 @@ async function setupSenderPeerConnection(){
   const pc=new RTCPeerConnection({iceServers:state.iceServers});
   state.peerConnection=pc;
   pc.onicecandidate=e=>{if(e.candidate)state.ws.send(JSON.stringify({type:'ice-candidate',candidate:e.candidate}));};
-  pc.oniceconnectionstatechange=()=>{if(pc.iceConnectionState==='failed')updateSenderStatus('Connection failed','error');};
+  pc.oniceconnectionstatechange=()=>{
+    const s=pc.iceConnectionState;
+    if(s==='failed')updateSenderStatus('Connection failed - check network','error');
+    else if(s==='connected'||s==='completed')updateSenderStatus('Connected! Transferring...','success');
+    else if(s==='checking')updateSenderStatus('Connecting to peer...');
+  };
   const ch=pc.createDataChannel('file-transfer',{ordered:true});
   state.dataChannel=ch;
   ch.onopen=()=>{updateSenderStatus('Connected! Transferring...','success');startFileTransfer();};

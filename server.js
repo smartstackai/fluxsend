@@ -29,6 +29,7 @@ app.get('/api/info', (req, res) => {
     primaryIP: lan.getPrimaryIP(),
     maxFileSize: config.maxFileSize,
     chunkSize: config.chunkSize,
+    iceServers: config.iceServers,
   });
 });
 
